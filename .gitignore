@@ -15,3 +15,10 @@ index/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Examen final: modelos y datos biometricos
+modelos/
+rostros/
+auditoria*.jsonl
+pruebas_umbral/
+.env
