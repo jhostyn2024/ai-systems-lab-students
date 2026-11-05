@@ -34,6 +34,10 @@ def main() -> None:
         f"{len(documents)} documentos → {len(chunks)} chunks "
         f"(chunk_size={settings.chunk_size}, overlap={settings.chunk_overlap} palabras)"
     )
+
+    for nivel in ("publico", "estudiante", "docente"):
+        print(f"  nivel {nivel}: {sum(c.nivel == nivel for c in chunks)} chunks")
+
     if show:
         for chunk in chunks:
             print(f"\n[{chunk.id}] ({len(chunk.text.split())} palabras)\n{chunk.text}")

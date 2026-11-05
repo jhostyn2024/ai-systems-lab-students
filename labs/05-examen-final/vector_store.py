@@ -4,6 +4,9 @@ Es deliberadamente simple (una matriz de NumPy y una lista de fragmentos) para v
 qué hacen por dentro Chroma, FAISS o pgvector: guardar vectores y encontrar los más
 cercanos a una consulta. Busca por fuerza bruta (compara la consulta con todos los
 vectores), suficiente para miles de fragmentos.
+
+Examen final: search() recibe los NIVELES permitidos para el rol y filtra ANTES de
+elegir el top-k. Un fragmento no permitido nunca sale de aquí, así que nunca llega al LLM.
 """
 
 import json
@@ -47,12 +50,19 @@ class VectorStore:
         self._vectors = vectors if self._vectors is None else np.vstack([self._vectors, vectors])
         self.chunks.extend(chunks)
 
-    def search(self, query_vector: np.ndarray, k: int) -> list[SearchResult]:
-        """Devuelve los k fragmentos más parecidos a la consulta, del más al menos parecido."""
+    def search(self, query_vector: np.ndarray, k: int, niveles: set[str] | None = None) -> list[SearchResult]:
+        """Devuelve los k fragmentos más parecidos a la consulta, del más al menos parecido.
+
+        niveles: niveles de acceso permitidos (p. ej. {"publico", "estudiante"}).
+        None = sin filtro (solo para uso interno del programa, nunca para armar el contexto del LLM).
+        """
         if self._vectors is None:
             return []
         scores = self._vectors @ normalize(query_vector)
-        top = np.argsort(scores)[::-1][:k]
+        if niveles is not None:  # ← NUEVO: filtro ANTES del top-k
+            permitidos = np.array([chunk.nivel in niveles for chunk in self.chunks])
+            scores = np.where(permitidos, scores, -np.inf)  # los no permitidos nunca quedan arriba
+        top = [i for i in np.argsort(scores)[::-1][:k] if np.isfinite(scores[i])]  # ← NUEVO: descarta los -inf
         return [SearchResult(chunk=self.chunks[i], score=float(scores[i])) for i in top]
 
     def save(self, index_dir: Path) -> None:

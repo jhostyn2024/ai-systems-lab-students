@@ -26,7 +26,7 @@ PROVIDER_BASE_URLS = {
 
 LAB_DIR = Path(__file__).resolve().parent
 # La solución docente usa los mismos documentos que el lab del estudiante.
-DATA_DIR = LAB_DIR.parent.parent / "labs" / "02-rag" / "data"
+DATA_DIR = LAB_DIR / "data"  # examen final: publico/ y restringido/
 INDEX_DIR = LAB_DIR / "index"  # generado por ingest.py; no se versiona
 
 
