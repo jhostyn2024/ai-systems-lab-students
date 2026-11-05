@@ -3,20 +3,18 @@
 Responsabilidades:
   1. Lanzar el servidor como subproceso y hablarle por stdin/stdout (transporte stdio).
   2. Descubrir sus tools (list_tools) y CONVERTIRLAS en el mismo `Tool` que las tools locales.
-     Ese adaptador es lo que hace que el asistente no distinga una tool local de una remota.
   3. Leer resources cuando la aplicación lo decide.
-
-Es el único módulo del asistente que importa `mcp` (el servidor es otro programa).
-El SDK de MCP es asíncrono: el cliente espera respuestas de otro proceso.
+  4. (Examen final) inyectar_identidad: el código del estudiante lo pone el software.
 
 Uso (sin LLM ni API key):
-    uv run python labs/04-agent-orchestration/mcp_client.py
+    uv run python labs/05-examen-final/mcp_client.py
 """
 
 import asyncio
 import json
 import sys
 from contextlib import AsyncExitStack
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +28,6 @@ SERVER_SCRIPT = Path(__file__).resolve().parent / "mcp_server.py"
 
 
 def server_parameters() -> StdioServerParameters:
-    # El servidor se ejecuta con el mismo intérprete (el entorno de uv) que el asistente.
     return StdioServerParameters(command=sys.executable, args=[str(SERVER_SCRIPT)])
 
 
@@ -40,7 +37,6 @@ async def open_client(stack: AsyncExitStack) -> Client:
 
 
 def result_to_text(result: CallToolResult) -> str:
-    """El resultado MCP es una lista de bloques de contenido; el LLM recibirá su texto."""
     text = "\n".join(block.text for block in result.content if block.type == "text")
     if result.is_error:
         raise ToolExecutionError(text)
@@ -60,10 +56,28 @@ def to_tool(client: Client, mcp_tool: MCPTool) -> Tool:
         description=mcp_tool.description or "",
         parameters=mcp_tool.input_schema,
         run=run,
-        # Sin la anotación, se asume lo más seguro: la tool puede tener efectos.
-        read_only=bool(annotations and annotations.read_only_hint),
+        read_only=bool(annotations and annotations.read_only_hint),  # sin anotación: se asume acción
         origin=client.server_info.name if client.server_info else "mcp",
     )
+
+
+def inyectar_identidad(tool: Tool, codigo: str) -> Tool:
+    """Examen final (R6): el software pone el código del estudiante; el modelo no puede elegirlo.
+
+    1. El esquema que ve el LLM ya NO tiene la propiedad "codigo".
+    2. Al ejecutar se descarta cualquier "codigo" que el modelo haya enviado y se usa el de la
+       sesión (que viene de usuarios.json tras el login facial, nunca del chat).
+    """
+    properties = {k: v for k, v in tool.parameters.get("properties", {}).items() if k != "codigo"}
+    required = [r for r in tool.parameters.get("required", []) if r != "codigo"]
+    parameters = {**tool.parameters, "properties": properties, "required": required}
+    run_original = tool.run
+
+    async def run(arguments: dict[str, Any]) -> str:
+        argumentos = {k: v for k, v in arguments.items() if k != "codigo"}  # lo que diga el modelo, se ignora
+        return await run_original({**argumentos, "codigo": codigo})
+
+    return replace(tool, parameters=parameters, run=run)
 
 
 async def load_mcp_tools(client: Client) -> list[Tool]:
@@ -77,32 +91,30 @@ async def read_resource_text(client: Client, uri: str) -> str:
 
 
 async def _demo() -> None:
+    from acceso import usuario_por_id
+
     async with Client(server_parameters()) as client:
         info = client.server_info
         print(f"Conectado a {info.name if info else '?'} (protocolo MCP {client.protocol_version})\n")
 
         tools = await load_mcp_tools(client)
-        print("Tools descubiertas (list_tools), ya convertidas a Tool:")
+        print("Tools descubiertas:")
         for tool in tools:
             kind = "solo lectura" if tool.read_only else "ACCIÓN"
-            print(f"\n- {tool.name} [{kind}]\n  {tool.description.splitlines()[0]}")
-            print("  parameters:", json.dumps(tool.parameters, ensure_ascii=False))
-
-        print("\nResources (list_resources):")
-        for resource in (await client.list_resources()).resources:
-            print(f"- {resource.uri}: {resource.description}")
-        print("\nContenido de academico://calendario:")
-        print(await read_resource_text(client, "academico://calendario"))
-
+            print(f"  - {tool.name} [{kind}] parámetros: {list(tool.parameters.get('properties', {}))}")
         by_name = {tool.name: tool for tool in tools}
-        if "consultar_notas" not in by_name:
-            print("\n(consultar_notas aún no existe en el servidor: TODO 4)")
-            return
-        print("\nconsultar_notas('2026001') →", await by_name["consultar_notas"].run({"codigo": "2026001"}))
-        try:
-            await by_name["consultar_notas"].run({"codigo": "9999"})
-        except ToolExecutionError as exc:
-            print("consultar_notas('9999')    → error:", exc)
+
+        # Inyección de identidad con el integrante 1 (estudiante) de usuarios.json
+        estudiante = usuario_por_id("integrante_1")
+        mis_notas = inyectar_identidad(by_name["consultar_mis_notas"], estudiante.codigo_estudiante)
+        print(f"\nSesión simulada: {estudiante.nombre} (código {estudiante.codigo_estudiante})")
+        print("Esquema que VE EL MODELO para consultar_mis_notas:", json.dumps(mis_notas.parameters, ensure_ascii=False))
+
+        print("\n1) El modelo la llama normal, sin argumentos:")
+        print(await mis_notas.run({}))
+
+        print("\n2) ATAQUE: el modelo intenta pasar codigo='2026001' (Ana Torres):")
+        print(await mis_notas.run({"codigo": "2026001"}))
 
 
 if __name__ == "__main__":
