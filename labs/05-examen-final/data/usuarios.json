@@ -6,14 +6,14 @@
       "nombre": "Jhostyn Gualdrón",
       "rol": "estudiante",
       "codigo_estudiante": "000550926",
-      "telegram_user_id": null
+      "telegram_user_id": 6892056328
     },
     {
       "id": "integrante_2",
       "nombre": "Luis Morales",
       "rol": "docente",
       "codigo_estudiante": null,
-      "telegram_user_id": null
+      "telegram_user_id": 9285161265
     }
   ]
 }
