@@ -97,3 +97,36 @@ def load_rag_settings() -> RAGSettings:
         top_k=int(os.getenv("RAG_TOP_K", "4")),
         min_score=float(os.getenv("RAG_MIN_SCORE", "0.35")),
     )
+
+
+
+# --- Examen final: identidad (Telegram, rostro, sesiones y prueba de vida) ------------------
+
+
+@dataclass(frozen=True)
+class IdentitySettings:
+    telegram_token: str
+    face_threshold: float  # similitud coseno mínima (justificada con la tabla FAR/FRR)
+    session_minutes: int  # validez de una sesión autenticada
+    login_max_attempts: int  # intentos fallidos antes del bloqueo temporal
+    lock_minutes: int  # duración del bloqueo
+    liveness_timeout_seconds: int  # tiempo para enviar la video-nota del reto
+    liveness_invert: bool  # True si en las video-notas izquierda/derecha salen invertidas (espejo)
+    yaw_threshold: float  # cuánto debe girar la cabeza (diagnostico_video.py ayuda a calibrarlo)
+
+
+def load_identity_settings(require_token: bool = False) -> IdentitySettings:
+    load_dotenv(find_dotenv(usecwd=True))
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if require_token and not token:
+        raise ValueError("Falta TELEGRAM_BOT_TOKEN en el .env (pídelo a @BotFather).")
+    return IdentitySettings(
+        telegram_token=token,
+        face_threshold=float(os.getenv("FACE_MATCH_THRESHOLD", "0.40")),
+        session_minutes=int(os.getenv("SESSION_MINUTES", "10")),
+        login_max_attempts=int(os.getenv("LOGIN_MAX_ATTEMPTS", "3")),
+        lock_minutes=int(os.getenv("LOGIN_LOCK_MINUTES", "5")),
+        liveness_timeout_seconds=int(os.getenv("LIVENESS_TIMEOUT_SECONDS", "60")),
+        liveness_invert=os.getenv("LIVENESS_INVERT", "false").strip().lower() in {"1", "true", "si", "sí"},
+        yaw_threshold=float(os.getenv("LIVENESS_YAW_THRESHOLD", "0.35")),
+    )
