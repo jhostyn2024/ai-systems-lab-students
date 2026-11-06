@@ -15,6 +15,7 @@ La sesión simulada existe solo para pruebas locales: en el bot, la sesión la c
 import asyncio
 import json
 import logging
+import re
 import sys
 from collections.abc import Callable
 from contextlib import AsyncExitStack
@@ -48,6 +49,7 @@ class Respuesta:
     error: str | None = None
     tools_ejecutadas: list[str] = field(default_factory=list)
     tools_denegadas: list[str] = field(default_factory=list)
+    documentos_bloqueados: list[str] = field(default_factory=list)  # niveles que el filtro del RAG ocultó
 
 
 class Nucleo:
@@ -80,6 +82,10 @@ class Nucleo:
                 self.auditar("acceso_denegado", {"tool": run.call.name, "rol": sesion.rol, "usuario": usuario})
             elif run.status == "ok":
                 respuesta.tools_ejecutadas.append(run.call.name)
+                # El filtro del RAG ocultó documentos de un nivel no permitido: también es un acceso denegado.
+                for nivel in re.findall(r"RESTRINGIDOS \(nivel (\w+)\)", run.result):
+                    respuesta.documentos_bloqueados.append(nivel)
+                    self.auditar("acceso_denegado", {"recurso": "documentos", "nivel": nivel, "rol": sesion.rol, "usuario": usuario})
                 if run.call.name not in TOOLS_PUBLICAS:
                     self.auditar("tool_restringida_ejecutada", {"tool": run.call.name, "rol": sesion.rol, "usuario": usuario})
         return respuesta

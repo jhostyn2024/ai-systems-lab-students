@@ -210,6 +210,8 @@ class Bot:
         usuario = sesion.usuario.id if sesion.usuario else None
         for tool in respuesta.tools_denegadas:
             self.auditoria.registrar(tid, "acceso_denegado", tool=tool, rol=sesion.rol, usuario=usuario)
+        for nivel in respuesta.documentos_bloqueados:  # el RAG ocultó documentos de ese nivel
+            self.auditoria.registrar(tid, "acceso_denegado", recurso="documentos", nivel=nivel, rol=sesion.rol, usuario=usuario)
         for tool in respuesta.tools_ejecutadas:
             if tool in RESTRINGIDAS:
                 self.auditoria.registrar(tid, "tool_restringida_ejecutada", tool=tool, rol=sesion.rol, usuario=usuario)
